@@ -7,6 +7,8 @@ A simple Flask application demonstrating an ad format that connects social media
 - `/` - Home page showing the ad format overview
 - `/ads` - List of all ad campaigns
 - `/ads/<id>` - View specific ad campaign details
+- `/api/ads` (GET) - List all ads in JSON format
+- `/api/ads` (POST) - Create a new ad campaign
 
 ## Setup
 
@@ -16,3 +18,5 @@ python app.py
 ```
 
 Visit http://localhost:5000
+
+作者: stlin256的openclaw

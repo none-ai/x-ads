@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, abort
+from flask import Flask, render_template_string, abort, request, jsonify
 
 app = Flask(__name__)
 
@@ -88,6 +88,34 @@ def ad_detail(ad_id):
         <p><a href="/ads">Back to All Ads</a></p>
     """
     return render_template_string(HTML_TEMPLATE, title=ad['product_name'], content=content)
+
+@app.route('/api/ads', methods=['POST'])
+def create_ad():
+    """API endpoint to create a new ad campaign"""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    required_fields = ['post_text', 'product_name', 'price']
+    missing = [f for f in required_fields if f not in data]
+    if missing:
+        return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
+
+    new_id = max(ad['id'] for ad in ads) + 1 if ads else 1
+    new_ad = {
+        "id": new_id,
+        "post_text": data['post_text'],
+        "product_name": data['product_name'],
+        "price": data['price'],
+        "clicks": 0
+    }
+    ads.append(new_ad)
+    return jsonify({"message": "Ad created successfully", "ad": new_ad}), 201
+
+@app.route('/api/ads', methods=['GET'])
+def list_ads_json():
+    """API endpoint to list all ads in JSON format"""
+    return jsonify(ads)
 
 if __name__ == '__main__':
     app.run(debug=True)

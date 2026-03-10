@@ -2,11 +2,50 @@ from flask import Flask, render_template_string, abort, request, jsonify, redire
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import json
+import logging
+import uuid
+from functools import wraps
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///xads.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# Request ID middleware
+@app.before_request
+def before_request():
+    g.request_id = str(uuid.uuid8())[:8]
+    logger.info(f"[{g.request_id}] {request.method} {request.path}")
+
+@app.after_request
+def after_request(response):
+    logger.info(f"[{g.request_id}] Status: {response.status_code}")
+    response.headers['X-Request-ID'] = g.request_id
+    return response
+
+# Health check endpoint
+@app.route('/health')
+def health_check():
+    try:
+        db.session.execute(db.text('SELECT 1'))
+        return jsonify({'status': 'healthy', 'request_id': g.request_id}), 200
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return jsonify({'status': 'unhealthy', 'error': str(e)}), 503
+
+# Global error handlers
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({'error': 'Resource not found', 'request_id': g.request_id}), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    logger.error(f"Server error: {e}")
+    return jsonify({'error': 'Internal server error', 'request_id': g.request_id}), 500
 
 # Database Models
 class Category(db.Model):
@@ -763,6 +802,29 @@ def api_create_category():
     db.session.commit()
 
     return jsonify({"message": "Category created", "category": {'id': new_cat.id, 'name': new_cat.name}}), 201
+
+# Enhanced stats endpoint
+@app.route('/api/stats')
+def api_stats():
+    """Enhanced statistics endpoint with more metrics"""
+    total_ads = Ad.query.count()
+    active_ads = Ad.query.filter_by(status='active').count()
+    paused_ads = Ad.query.filter_by(status='paused').count()
+    completed_ads = Ad.query.filter_by(status='completed').count()
+    
+    total_clicks = db.session.query(db.func.sum(Ad.clicks)).scalar() or 0
+    total_impressions = db.session.query(db.func.sum(Ad.impressions)).scalar() or 0
+    
+    return jsonify({
+        'total_ads': total_ads,
+        'active_ads': active_ads,
+        'paused_ads': paused_ads,
+        'completed_ads': completed_ads,
+        'total_clicks': total_clicks,
+        'total_impressions': total_impressions,
+        'ctr': round(total_clicks / total_impressions * 100, 2) if total_impressions > 0 else 0,
+        'avg_clicks_per_ad': round(total_clicks / total_ads, 2) if total_ads > 0 else 0
+    })
 
 if __name__ == '__main__':
     app.run(debug=True)
